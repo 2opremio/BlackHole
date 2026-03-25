@@ -2811,7 +2811,31 @@ static OSStatus	BlackHole_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 				((AudioChannelLayout*)outData)->mNumberChannelDescriptions = kNumber_Of_Channels;
 				for(theItemIndex = 0; theItemIndex < kNumber_Of_Channels; ++theItemIndex)
 				{
-					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelLabel = kAudioChannelLabel_Left + theItemIndex;
+					// Use QUAD labels (L, R, LS, RS) for 4-channel devices.
+				// The original sequential assignment (L, R, C, LFE, LS, RS, ...)
+				// causes CoreAudio to compute a channel mix matrix when the source
+				// layout doesn't match. Chrome Web Audio with channelCount=4
+				// outputs QUAD layout (L, R, LeftSurround, RightSurround).
+				// When the destination has L/R/C/LFE labels, CoreAudio folds
+				// LeftSurround and RightSurround back into L/R, silencing
+				// channels 2-3. Matching the QUAD layout produces an identity
+				// matrix so all 4 channels pass through discretely.
+				//
+				// NOTE: kAudioChannelLabel_Discrete_N does NOT work here —
+				// Chrome's QUAD source vs discrete destination still triggers
+				// CoreAudio's channel mixer.
+				{
+				static const AudioChannelLabel kQuadLabels[] = {
+					kAudioChannelLabel_Left,
+					kAudioChannelLabel_Right,
+					kAudioChannelLabel_LeftSurround,
+					kAudioChannelLabel_RightSurround,
+				};
+				((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelLabel =
+					(kNumber_Of_Channels == 4 && theItemIndex < 4)
+					? kQuadLabels[theItemIndex]
+					: kAudioChannelLabel_Left + theItemIndex;
+				}
 					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mChannelFlags = 0;
 					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mCoordinates[0] = 0;
 					((AudioChannelLayout*)outData)->mChannelDescriptions[theItemIndex].mCoordinates[1] = 0;
